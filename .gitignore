@@ -47,3 +47,10 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+# revealjs folders
+eda-presentation_files/
+eda-presentation_cache/
+
+*.html
+*.Rproj

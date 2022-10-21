@@ -1,0 +1,158 @@
+---
+title: "EDA II"
+format:
+  revealjs:
+    theme: custom.scss
+    footer: "Operations and Information Systems"
+    slide-number: true
+title-slide-attributes: 
+  data-background-image: eccles-logo.png
+  data-background-size: 50%
+  data-background-position: 50% 10%
+execute: 
+  echo: false
+  message: false
+  error: false
+  cache: true
+---
+
+## Season 1
+
+
+```{r setup}
+library(tidyverse)
+library(tidytext)
+library(wordcloud)
+library(ggrepel)
+
+theme_local <- function(bs=15,...){
+    theme_bw(base_size=15) +
+    theme(
+        legend.position='bottom',
+        panel.grid=element_blank(),
+        axis.line.x=element_line(color='black'),
+        axis.line.y=element_line(color='black'),
+        panel.border=element_blank(),
+        ...
+    )
+}
+```
+
+```{r data-acquisition}
+bigfoot <- read_csv("https://query.data.world/s/lob6ov5lm7s4bsn66zznszqitfhqr7")
+```
+
+```{r season1}
+ss <- bigfoot |> count(season) |> mutate(season=factor(season,levels=c('Unknown','Fall','Summer','Spring','Winter')))
+ggplot(ss) + 
+  geom_col(aes(y=season,x=n)) + 
+  theme_local()
+```
+
+## Season 2
+
+```{r season2}
+#| fig-height: 8
+#| echo: true
+#| layout-ncol: 2
+by_state <- bigfoot |> count(state) |> mutate(state_fac=factor(state))
+ggplot(by_state) +
+  geom_col(aes(y=state_fac,x=n)) +
+  scale_y_discrete(limits = rev(levels(by_state$state_fac))) +
+  theme_local()
+
+```
+
+## Sightings 1
+```{r wc}
+#| layout-ncol: 2
+#| fig-height: 8
+#| fig-width: 8
+
+bf_words <- bigfoot |>
+  unnest_tokens(word,observed) |>
+  anti_join(stop_words,by=c('word')) |>
+  count(word)
+
+total_sigtings_by_season <- bigfoot |> count(season,name='total_by_season')
+
+bf_seasons_words <- bigfoot |>
+	unnest_tokens(word,observed) |>
+	anti_join(stop_words,by=c('word')) |>
+	group_by(word,season) |>
+	summarise(n=n(),nd=n_distinct(number),.groups='drop') |>
+	left_join(total_sigtings_by_season,by=c('season')) |>
+	mutate(pct_mention=nd/total_by_season)
+
+wordcloud(words = bf_seasons_words$word[bf_seasons_words$season == 'Summer'],
+          freq = bf_seasons_words$n[bf_seasons_words$season == 'Summer'],
+          min.freq = 1,
+          max.words=200,
+          random.order=FALSE,
+          rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+
+wordcloud(words = bf_seasons_words$word[bf_seasons_words$season == 'Fall'],
+          freq = bf_seasons_words$n[bf_seasons_words$season == 'Fall'],
+          min.freq = 1,
+          max.words=200,
+          random.order=FALSE,
+          rot.per=0.35,
+          colors=brewer.pal(8, "Dark2"))
+
+```
+
+## Sightings 2
+
+```{r barplot}
+bf_season_scatter <- bf_seasons_words |>
+	pivot_wider(names_from=season,values_from=n,values_fill=list(n=0),id_cols=word) |>
+	mutate(fall_summer=Fall + Summer) |>
+	filter(fall_summer > 200)
+
+bf_season_bar <- bf_season_scatter |>
+	select(word,Fall,Summer) |>
+	pivot_longer(cols=c(Fall,Summer),names_to='season',values_to='n') |>
+	group_by(season) |>
+	top_n(15,wt=n) |> 
+	ungroup() |>
+	pivot_wider(names_from=season,values_from=n,values_fill=list(n=0)) |> # pivot_wider trick to 0 pad
+	pivot_longer(cols=c(Fall,Summer),names_to='season',values_to='n')
+
+ggplot(bf_season_bar,aes(y=word,x=n,fill=season)) +
+	geom_col(position='dodge') +
+	labs(x='# of Mentions',y='Word mentioned',fill='Season') +
+	theme_local()
+```
+
+## Sightings 3
+
+```{r scatter1}
+ggplot(bf_season_scatter,aes(x=Fall,y=Summer)) +
+	geom_point() +
+	geom_abline(slope=1,intercept=0) +
+	# geom_vline(xintercept=900) +
+	ggrepel::geom_text_repel(aes(label=word),data=filter(bf_season_scatter,Fall > 900)) +
+	theme_local()
+```
+
+## Sightings 4
+
+```{r scatter2}
+bf_scatter_fixed <- bf_seasons_words |>
+	filter(season %in% c('Summer','Fall')) |>
+	group_by(word) |> mutate(total=sum(n)) |>
+	filter(total >= 200) |>
+	pivot_wider(names_from=season,values_from=pct_mention,values_fill=list(pct_mention=0),id_cols=word) |>
+	mutate(dd=Fall-Summer)
+
+ggplot(bf_scatter_fixed,aes(x=Fall,y=Summer)) +
+	geom_point() +
+	geom_abline(slope=1,intercept=0) +
+	# ggrepel::geom_text_repel(aes(label=word),data=filter(bf_scatter_fixed,abs(dd) >= 0.03 | Fall >= 0.3)) +
+	ggrepel::geom_text_repel(aes(label=word),data=filter(bf_scatter_fixed,abs(dd) >= 0.03)) +
+	scale_x_continuous(labels=scales::percent) +
+	scale_y_continuous(labels=scales::percent) +
+	labs(title='Percent of Comments Mentioning Each Word') +
+	theme_local()
+```
