@@ -5,6 +5,8 @@ format:
     theme: custom.scss
     footer: "Operations and Information Systems"
     slide-number: true
+  docx:
+    number-sections: true
 title-slide-attributes: 
   data-background-image: eccles-logo.png
   data-background-size: 50%
@@ -16,14 +18,34 @@ execute:
   cache: true
 ---
 
-## Season 1
+## Testing Hypotheses | Bigfoot Edition
 
+::::{.medium-text}
+:::{.absolute top=90 left=0 width=620}
+**Hypothesis**: Bigfoot sightings happen more during the spring and summer when people are outside more.
+:::
+
+:::{.absolute top=250 left=0 width=620}
+**Question**: what data do we need?  
+[**Answer**: bigfoot sightings with season]{.fragment}
+:::
+
+:::{.absolute top=450 left=0 width=620}
+**Question**: if hypothesis is true, what would we see?  
+[**Answer**: bar chart with spring/summer bars higher than others]{.fragment}
+:::
+::::
+
+![](images/harry.jpg){fig-align="right"}
 
 ```{r setup}
 library(tidyverse)
 library(tidytext)
 library(wordcloud)
 library(ggrepel)
+library(bigrquery)
+
+project_id <- 'is-6812-363412'
 
 theme_local <- function(bs=15,...){
     theme_bw(base_size=15) +
@@ -36,20 +58,42 @@ theme_local <- function(bs=15,...){
         ...
     )
 }
+
+single_color <- '#3891A6'
+background_color <- '#BCC5C8'
 ```
 
+## Get Data
+Download data from data.world
 ```{r data-acquisition}
+#| echo: true
 bigfoot <- read_csv("https://query.data.world/s/lob6ov5lm7s4bsn66zznszqitfhqr7")
 ```
 
-```{r season1}
-ss <- bigfoot |> count(season) |> mutate(season=factor(season,levels=c('Unknown','Fall','Summer','Spring','Winter')))
-ggplot(ss) + 
-  geom_col(aes(y=season,x=n)) + 
-  theme_local()
+## Prep data for chart
+Count sightings by season, setup factor so chart is in the right order.
+```{r season1-prep}
+#| echo: true
+ss <- bigfoot |> 
+    count(season) |> 
+    mutate(season=factor(season,levels=c('Unknown','Fall','Summer','Spring','Winter')))
 ```
 
-## Season 2
+## Create chart
+
+```{r season1-chart}
+#| echo: true
+#| code-line-numbers: "|2|3|4|5"
+ggplot(ss) + 
+    geom_col(aes(y=season,x=n),fill=single_color) + 
+    labs(x='# of Sightings',y='Season') +
+    scale_x_continuous(labels=scales::comma) +
+    theme_local()
+```
+
+[Interesting that it's Summer and Fall...]{.fragment}
+
+## Chart by state
 
 ```{r season2}
 #| fig-height: 8
@@ -63,27 +107,38 @@ ggplot(by_state) +
 
 ```
 
-## Sightings 1
-```{r wc}
-#| layout-ncol: 2
-#| fig-height: 8
-#| fig-width: 8
+::::{.fragment}
+:::{.absolute top=300 left=600 width=650}
+What is happening in Washington in the spring?
+:::
+::::
 
-bf_words <- bigfoot |>
-  unnest_tokens(word,observed) |>
-  anti_join(stop_words,by=c('word')) |>
-  count(word)
+## Different objective
+[We want to design a program around sightings and need to know what materials to develop.]{.medium-text}  
+[To do this, we need to know how the sightings might be different between Summer and Fall.]{.medium-text}
 
-total_sigtings_by_season <- bigfoot |> count(season,name='total_by_season')
+```{r wc-prep}
+#| echo: true
+#| code-line-numbers: "|4-5|6-7|8|9"
+
+total_sightings_by_season <- bigfoot |> count(season,name='total_by_season')
 
 bf_seasons_words <- bigfoot |>
 	unnest_tokens(word,observed) |>
 	anti_join(stop_words,by=c('word')) |>
 	group_by(word,season) |>
 	summarise(n=n(),nd=n_distinct(number),.groups='drop') |>
-	left_join(total_sigtings_by_season,by=c('season')) |>
+	left_join(total_sightings_by_season,by=c('season')) |>
 	mutate(pct_mention=nd/total_by_season)
 
+bf_seasons_words |> slice_head(n=5) |> knitr::kable() |> kableExtra::kable_styling(bootstrap_options='striped',font_size=15)
+```
+
+## Try Wordclouds
+```{r wc}
+#| layout-ncol: 2
+#| fig-height: 8
+#| fig-width: 8
 wordcloud(words = bf_seasons_words$word[bf_seasons_words$season == 'Summer'],
           freq = bf_seasons_words$n[bf_seasons_words$season == 'Summer'],
           min.freq = 1,
@@ -101,12 +156,18 @@ wordcloud(words = bf_seasons_words$word[bf_seasons_words$season == 'Fall'],
           colors=brewer.pal(8, "Dark2"))
 
 ```
+[Summer]{.absolute top=150 left=190}
+[Fall]{.absolute top=150 left=770}
 
-## Sightings 2
 
-```{r barplot}
+## Prep for barplot
+
+```{r barplot-prep}
+#| echo: true
+#| code-line-numbers: "|1-5|8|9-12|13-14"
 bf_season_scatter <- bf_seasons_words |>
-	pivot_wider(names_from=season,values_from=n,values_fill=list(n=0),id_cols=word) |>
+	pivot_wider(names_from=season,values_from=n,
+	            values_fill=list(n=0),id_cols=word) |>
 	mutate(fall_summer=Fall + Summer) |>
 	filter(fall_summer > 200)
 
@@ -118,16 +179,20 @@ bf_season_bar <- bf_season_scatter |>
 	ungroup() |>
 	pivot_wider(names_from=season,values_from=n,values_fill=list(n=0)) |> # pivot_wider trick to 0 pad
 	pivot_longer(cols=c(Fall,Summer),names_to='season',values_to='n')
+```
 
+## Bar plot
+```{r barplot}
 ggplot(bf_season_bar,aes(y=word,x=n,fill=season)) +
 	geom_col(position='dodge') +
 	labs(x='# of Mentions',y='Word mentioned',fill='Season') +
 	theme_local()
 ```
 
-## Sightings 3
+## Try a scatterplot
 
 ```{r scatter1}
+#| echo: true
 ggplot(bf_season_scatter,aes(x=Fall,y=Summer)) +
 	geom_point() +
 	geom_abline(slope=1,intercept=0) +
@@ -136,23 +201,42 @@ ggplot(bf_season_scatter,aes(x=Fall,y=Summer)) +
 	theme_local()
 ```
 
-## Sightings 4
+:::{.absolute top=300 left=850 width=600}
+::::{.medium-text}
+What is wrong?
+::::
+:::
 
-```{r scatter2}
+## Adjust data set to show percentages
+
+```{r scatter2-prep}
+#| echo: true
+#| code-line-numbers: "|2|3"
 bf_scatter_fixed <- bf_seasons_words |>
 	filter(season %in% c('Summer','Fall')) |>
 	group_by(word) |> mutate(total=sum(n)) |>
 	filter(total >= 200) |>
-	pivot_wider(names_from=season,values_from=pct_mention,values_fill=list(pct_mention=0),id_cols=word) |>
+	pivot_wider(names_from=season,values_from=pct_mention,
+	            values_fill=list(pct_mention=0),id_cols=word) |>
 	mutate(dd=Fall-Summer)
+```
 
+Create the following data set:  
+
+* word
+* number of times word shows up in Fall
+* number of times word shows up in Summer
+
+## What do we learn now?
+```{r scatter2}
+#| echo: true
 ggplot(bf_scatter_fixed,aes(x=Fall,y=Summer)) +
 	geom_point() +
 	geom_abline(slope=1,intercept=0) +
-	# ggrepel::geom_text_repel(aes(label=word),data=filter(bf_scatter_fixed,abs(dd) >= 0.03 | Fall >= 0.3)) +
 	ggrepel::geom_text_repel(aes(label=word),data=filter(bf_scatter_fixed,abs(dd) >= 0.03)) +
 	scale_x_continuous(labels=scales::percent) +
 	scale_y_continuous(labels=scales::percent) +
 	labs(title='Percent of Comments Mentioning Each Word') +
 	theme_local()
 ```
+
