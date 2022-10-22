@@ -64,26 +64,23 @@ background_color <- '#BCC5C8'
 ```
 
 ## Get Data
-Download data from data.world
 ```{r data-acquisition}
-#| echo: true
 bigfoot <- read_csv("https://query.data.world/s/lob6ov5lm7s4bsn66zznszqitfhqr7")
 ```
+Get data on [bigfoot sightings from data.world](https://data.world/timothyrenner/bfro-sightings-data)
 
-## Prep data for chart
-Count sightings by season, setup factor so chart is in the right order.
+Count sightings by season and see if hypothesis is supported.
+
+
+## Create chart
+
 ```{r season1-prep}
-#| echo: true
 ss <- bigfoot |> 
     count(season) |> 
     mutate(season=factor(season,levels=c('Unknown','Fall','Summer','Spring','Winter')))
 ```
 
-## Create chart
-
 ```{r season1-chart}
-#| echo: true
-#| code-line-numbers: "|2|3|4|5"
 ggplot(ss) + 
     geom_col(aes(y=season,x=n),fill=single_color) + 
     labs(x='# of Sightings',y='Season') +
@@ -91,14 +88,12 @@ ggplot(ss) +
     theme_local()
 ```
 
-[Interesting that it's Summer and Fall...]{.fragment}
+[Interesting that it's Summer and Fall, why could that be? What's the next thing we should look at?]{.fragment}
 
 ## Chart by state
 
 ```{r season2}
 #| fig-height: 8
-#| echo: true
-#| layout-ncol: 2
 by_state <- bigfoot |> count(state) |> mutate(state_fac=factor(state))
 ggplot(by_state) +
   geom_col(aes(y=state_fac,x=n)) +
@@ -115,12 +110,12 @@ What is happening in Washington in the spring?
 
 ## Different objective
 [We want to design a program around sightings and need to know what materials to develop.]{.medium-text}  
+
 [To do this, we need to know how the sightings might be different between Summer and Fall.]{.medium-text}
 
-```{r wc-prep}
-#| echo: true
-#| code-line-numbers: "|4-5|6-7|8|9"
+[We will analyze the data we have describing each sighting.]{.medium-text}
 
+```{r wc-prep}
 total_sightings_by_season <- bigfoot |> count(season,name='total_by_season')
 
 bf_seasons_words <- bigfoot |>
@@ -131,7 +126,7 @@ bf_seasons_words <- bigfoot |>
 	left_join(total_sightings_by_season,by=c('season')) |>
 	mutate(pct_mention=nd/total_by_season)
 
-bf_seasons_words |> slice_head(n=5) |> knitr::kable() |> kableExtra::kable_styling(bootstrap_options='striped',font_size=15)
+# bf_seasons_words |> slice_head(n=5) |> knitr::kable() |> kableExtra::kable_styling(bootstrap_options='striped',font_size=15)
 ```
 
 ## Try Wordclouds
@@ -159,12 +154,13 @@ wordcloud(words = bf_seasons_words$word[bf_seasons_words$season == 'Fall'],
 [Summer]{.absolute top=150 left=190}
 [Fall]{.absolute top=150 left=770}
 
+:::{.fragment}
+[What do we learn from these visualizations?]{.absolute bottom=80 left=0}
+:::
 
-## Prep for barplot
+## Bar plot
 
 ```{r barplot-prep}
-#| echo: true
-#| code-line-numbers: "|1-5|8|9-12|13-14"
 bf_season_scatter <- bf_seasons_words |>
 	pivot_wider(names_from=season,values_from=n,
 	            values_fill=list(n=0),id_cols=word) |>
@@ -181,18 +177,18 @@ bf_season_bar <- bf_season_scatter |>
 	pivot_longer(cols=c(Fall,Summer),names_to='season',values_to='n')
 ```
 
-## Bar plot
 ```{r barplot}
+#| fig-align: center
 ggplot(bf_season_bar,aes(y=word,x=n,fill=season)) +
 	geom_col(position='dodge') +
-	labs(x='# of Mentions',y='Word mentioned',fill='Season') +
+	labs(x='# of Mentions',y='Word mentioned',fill='Season',title='Top 15 words from each season') +
 	theme_local()
 ```
+
 
 ## Try a scatterplot
 
 ```{r scatter1}
-#| echo: true
 ggplot(bf_season_scatter,aes(x=Fall,y=Summer)) +
 	geom_point() +
 	geom_abline(slope=1,intercept=0) +
@@ -201,17 +197,9 @@ ggplot(bf_season_scatter,aes(x=Fall,y=Summer)) +
 	theme_local()
 ```
 
-:::{.absolute top=300 left=850 width=600}
-::::{.medium-text}
-What is wrong?
-::::
-:::
-
 ## Adjust data set to show percentages
 
 ```{r scatter2-prep}
-#| echo: true
-#| code-line-numbers: "|2|3"
 bf_scatter_fixed <- bf_seasons_words |>
 	filter(season %in% c('Summer','Fall')) |>
 	group_by(word) |> mutate(total=sum(n)) |>
@@ -221,15 +209,7 @@ bf_scatter_fixed <- bf_seasons_words |>
 	mutate(dd=Fall-Summer)
 ```
 
-Create the following data set:  
-
-* word
-* number of times word shows up in Fall
-* number of times word shows up in Summer
-
-## What do we learn now?
 ```{r scatter2}
-#| echo: true
 ggplot(bf_scatter_fixed,aes(x=Fall,y=Summer)) +
 	geom_point() +
 	geom_abline(slope=1,intercept=0) +
