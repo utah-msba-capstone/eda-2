@@ -2,8 +2,6 @@
 library(tidyverse)
 library(bigrquery)
 
-project_id <- 'is-6812-363412'
-
 qq <- 'SELECT 
   visitorId,
   visitNumber,
@@ -24,7 +22,7 @@ FROM `bigquery-public-data.google_analytics_sample.ga_sessions_*`,
   unnest(h.product) as hp
 where _table_suffix between "20170101" and "20170401"'
 
-all_info_qq <- bq_project_query(project_id,qq)
+all_info_qq <- bq_project_query(Sys.getenv('PROJECT_ID'),qq)
 all_info <- bq_table_download(all_info_qq)
 
 hits_per_purchase <- all_info |>
@@ -38,8 +36,6 @@ ggplot(hits_per_purchase) +
     theme_bw()
 
 prod_lm <- lm(purchases ~ hits,data=hits_per_purchase)
-
-# hits_per_purchase$fitted_values <- predict(prod_lm,hits_per_purchase)
 
 reg_analysis <- hits_per_purchase |>
     modelr::add_predictions(prod_lm) |>
