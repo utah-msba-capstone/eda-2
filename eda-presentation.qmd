@@ -15,7 +15,7 @@ execute:
   echo: false
   message: false
   error: false
-  cache: true
+  cache: false
 ---
 
 ## Testing Hypotheses | Bigfoot Edition
